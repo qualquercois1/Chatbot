@@ -12,3 +12,6 @@ Endpoints:
 - localhost/agendas/ (DELETE)
     descrição: 
         Deleta um horario de uma especialidade.
+
+
+uvicorn main:app --reload
