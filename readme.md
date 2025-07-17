@@ -15,3 +15,5 @@ Endpoints:
 
 
 uvicorn main:app --reload
+ou
+uvicorn app.main:app --reload

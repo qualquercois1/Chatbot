@@ -8,3 +8,5 @@ URL_CONSULTAS = BASE_DIR / "data" / "pessoa_horario.csv"
 
 CABECALHO_CADASTROS = ["nome", "idade", "sexo", "cpf", "telefone", "email"]
 CABECALHO_CONSULTAS = ["cpf", "especialidade", "doutor", "horario"]
+
+API_URL_BASE = "http://127.0.0.1:8000"

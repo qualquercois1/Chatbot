@@ -2,11 +2,11 @@
 import csv
 from app.config import URL_CADASTROS, URL_CONSULTAS, CABECALHO_CADASTROS
 from app.schemas import CadastroPessoaPayload, ConsultaPayload
-from .agenda_service import AgendaService, get_agenda_service # Importando o outro serviço
+from .agenda_service import AgendaService, get_agenda_service 
+from typing import Optional
 from fastapi import Depends
 
 class PessoasService:
-    # Injetamos o serviço de agenda aqui!
     def __init__(self, agenda_service: AgendaService):
         self.agenda_service = agenda_service
 
@@ -20,6 +20,26 @@ class PessoasService:
             return False
         except FileNotFoundError:
             return False
+        
+    def buscar_por_cpf(self, cpf: str) -> Optional[CadastroPessoaPayload]:
+
+        try:
+            with open(URL_CADASTROS, mode='r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for linha in reader:
+                    if linha and linha.get('cpf', '').strip() == cpf:
+                        dados = {
+                            "nome": linha.get("nome", "").strip(),
+                            "idade": int(linha.get("idade", "0").strip() or 0),
+                            "sexo": linha.get("sexo", "").strip(),
+                            "cpf": linha.get("cpf", "").strip(),
+                            "telefone": linha.get("telefone", "").strip(),
+                            "email": linha.get("email", "").strip(),
+                        }
+                        return CadastroPessoaPayload(**dados)
+        except FileNotFoundError:
+            return None
+        return None
 
     def cadastrar(self, payload: CadastroPessoaPayload):
         if self._cpf_existe(payload.cpf, URL_CADASTROS):

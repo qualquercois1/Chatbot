@@ -5,6 +5,19 @@ from app.schemas import CadastroPessoaPayload, ConsultaPayload
 
 router = APIRouter(tags=["Pessoas e Consultas"])
 
+@router.get("/pessoas/{cpf}", response_model=CadastroPessoaPayload)
+def obter_pessoa_por_cpf(
+    cpf: str,
+    service: PessoasService = Depends(get_pessoas_service)
+):
+    pessoa = service.buscar_por_cpf(cpf)
+    if not pessoa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pessoa com CPF '{cpf}' não encontrada."
+        )
+    return pessoa
+
 @router.post("/pessoas/cadastro", status_code=status.HTTP_201_CREATED)
 def cadastrar_pessoa(payload: CadastroPessoaPayload, service: PessoasService = Depends(get_pessoas_service)):
     sucesso = service.cadastrar(payload)
