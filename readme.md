@@ -13,7 +13,15 @@ Endpoints:
     descrição: 
         Deleta um horario de uma especialidade.
 
-
+# Executa a api
+Repositorio: Chatbot/backend/app
+Comando:
 uvicorn main:app --reload
 ou
 uvicorn app.main:app --reload
+
+# Testar a parte do gemini
+Repositorio: Chatbot/backend/app 
+Comando: python -m services.gemini_service
+
+lembre de colocar a chave da api do gemini em um arquivo .env no diretorio raiz com o seguinte nome da variavel *API_KEY*
