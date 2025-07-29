@@ -1,31 +1,32 @@
 # API de Gerenciamento de Consultas Médicas com Chatbot
 
-Esta é uma API desenvolvida em FastAPI para gerenciar o cadastro de pacientes, horários de médicos e o agendamento de consultas, com o objetivo de ser integrada a um serviço de chatbot com a API do Gemini.
+Esta é uma API desenvolvida em FastAPI para gerenciar o cadastro de pacientes, horários de médicos e o agendamento de consultas, com o objetivo de ser integrada a um serviço de chatbot com a API do Gemini e um frontend no Telegram.
 
 ## Tecnologias Utilizadas
 
-- **Python 3.11+**
-- **FastAPI:** Framework web para a construção da API.
-- **Uvicorn:** Servidor ASGI para executar a API.
-- **Google Generative AI:** Para a integração com o serviço de chatbot.
-- **Pydantic:** Para validação de dados.
+- Python 3.11+
+- FastAPI: Framework web para a construção da API.
+- Uvicorn: Servidor ASGI para executar a API.
+- Google Generative AI: Para a integração com o serviço de chatbot.
+- python-telegram-bot: Para a criação do bot no Telegram.
+- Pydantic: Para validação de dados.
 
 ## Configuração do Ambiente
 
 Siga os passos abaixo para configurar e executar o projeto localmente.
 
 1.  **Crie um Ambiente Virtual**
-    Na pasta raiz do projeto, crie um ambiente virtual para isolar as dependências:
+    Na pasta raiz do projeto (`Chatbot/`), crie um ambiente virtual para isolar as dependências:
     ```bash
     python -m venv venv
     ```
 
 2.  **Ative o Ambiente Virtual**
-    * No Windows (PowerShell/CMD):
+    - No Windows (PowerShell/CMD):
         ```bash
         .\venv\Scripts\activate
         ```
-    * No macOS/Linux:
+    - No macOS/Linux:
         ```bash
         source venv/bin/activate
         ```
@@ -37,38 +38,39 @@ Siga os passos abaixo para configurar e executar o projeto localmente.
     pip install -r requirements.txt
     ```
 
-4.  **Configure a Chave da API**
-    Crie um arquivo chamado `.env` na pasta raiz do projeto (`Chatbot/backend/`) e adicione sua chave da API do Gemini:
-    
+4.  **Configure as Chaves de API**
+    Crie um arquivo chamado `.env` na pasta raiz do projeto (`Chatbot/`) e adicione suas chaves da API do Gemini e do Telegram:
+
     **.env**
     ```
     API_KEY="SUA_CHAVE_SECRETA_DO_GEMINI_AQUI"
+    TELEGRAM_TOKEN="SEU_TOKEN_SECRETO_DO_TELEGRAM_AQUI"
     ```
 
 ## Executando a Aplicação
 
-Para que o sistema completo funcione, você precisará de **dois terminais abertos** com o ambiente virtual ativado em ambos.
+Para que o sistema completo funcione, você precisará de **dois terminais abertos**, com o ambiente virtual ativado em ambos.
 
-#### Terminal 1: Execute a API
+#### Terminal 1: Execute a API (Backend)
 
 1.  Navegue até a pasta `Chatbot/backend/`.
-2.  Ative o ambiente virtual: `.\venv\Scripts\activate`
+2.  Ative o ambiente virtual: `..\venv\Scripts\activate` (se estiver vindo da raiz) ou `.\venv\Scripts\activate` (se já tiver criado o venv dentro de backend).
 3.  Inicie o servidor da API com Uvicorn:
     ```bash
-    uvicorn app.main:app --reload
+    python -m uvicorn app.main:app --reload
     ```
-4.  Você verá uma mensagem indicando que o servidor está rodando, geralmente em `http://127.0.0.1:8000`.
+4.  Você verá uma mensagem indicando que o servidor está rodando, geralmente em `http://127.0.0.1:8000`. Deixe este terminal aberto.
 
-#### Terminal 2: Execute o Serviço do Gemini
+#### Terminal 2: Execute o Bot do Telegram (Frontend)
 
 1.  Abra um novo terminal.
-2.  Navegue até a pasta `Chatbot/backend/app`.
-3.  Ative o ambiente virtual: `.\venv\Scripts\activate`
+2.  Navegue até a pasta `Chatbot/frontend/`.
+3.  Ative o mesmo ambiente virtual: `..\venv\Scripts\activate`
 4.  Execute o script do chatbot:
     ```bash
-    python -m services.gemini_service
+    python telegram_bot.py
     ```
-5.  Interaja com o chatbot conforme as instruções que aparecerão no terminal.
+5.  Agora, abra o Telegram, encontre seu bot e envie o comando `/start` para iniciar a interação.
 
 ## Documentação da API (Endpoints)
 
@@ -96,53 +98,18 @@ Endpoints relacionados ao gerenciamento de informações de pacientes.
       "email": "joao.silva@example.com"
     }
     ```
-- **Resposta de Sucesso (201 Created):**
-    ```json
-    {
-      "detail": "Pessoa cadastrada com sucesso."
-    }
-    ```
-- **Resposta de Erro (409 Conflict):**
-    ```json
-    {
-      "detail": "CPF já cadastrado."
-    }
-    ```
 
 #### 2. Obter Pessoa por CPF
 
 - **Método:** `GET`
 - **Rota:** `/pessoas/{cpf}`
 - **Descrição:** Busca e retorna os dados de um paciente a partir do seu CPF.
-- **Resposta de Sucesso (200 OK):**
-    ```json
-    {
-      "nome": "João da Silva",
-      "idade": 35,
-      "sexo": "Masculino",
-      "cpf": "12345678900",
-      "telefone": "61999998888",
-      "email": "joao.silva@example.com"
-    }
-    ```
-- **Resposta de Erro (404 Not Found):**
-    ```json
-    {
-      "detail": "Pessoa com CPF '12345678900' não encontrada."
-    }
-    ```
 
 #### 3. Deletar Pessoa por CPF
 
 - **Método:** `DELETE`
 - **Rota:** `/{cpf}`
 - **Descrição:** Deleta o cadastro de um paciente do sistema.
-- **Resposta de Sucesso (200 OK):**
-    ```json
-    {
-      "detail": "Pessoa com CPF '12345678900' deletada com sucesso."
-    }
-    ```
 
 ---
 
@@ -159,19 +126,8 @@ Endpoints relacionados ao gerenciamento de informações de pacientes.
         "cpf_paciente": "12345678900",
         "especialidade": "Cardiologia",
         "id_medico": 1,
+        "doutor": "Dr. House",
         "data_hora": "2025-08-15T10:00:00"
-    }
-    ```
-- **Resposta de Sucesso (201 Created):**
-    ```json
-    {
-        "detail": "Consulta agendada com sucesso."
-    }
-    ```
-- **Resposta de Erro (400 Bad Request):**
-    ```json
-    {
-        "detail": "Mensagem de erro específica (ex: Horário não disponível)."
     }
     ```
 
@@ -181,68 +137,54 @@ Endpoints relacionados ao gerenciamento de informações de pacientes.
 
 Endpoints para visualizar e gerenciar os horários dos médicos.
 
-#### 1. Listar Horários por Especialidade
+#### 1. Listar Todas as Especialidades
 
 - **Método:** `GET`
-- **Rota:** `/agendas/{especialidade}`
-- **Descrição:** Lista todos os horários de atendimento disponíveis para uma dada especialidade.
+- **Rota:** `/agendas/especialidades`
+- **Descrição:** Retorna uma lista com todas as especialidades disponíveis.
 - **Resposta de Sucesso (200 OK):**
     ```json
     [
-      {
-        "medico": "Dr. Carlos Andrade",
-        "id_medico": 1,
-        "horarios_disponiveis": [
-          "2025-08-15T10:00:00",
-          "2025-08-15T11:00:00"
-        ]
-      }
+        "Cardiologia",
+        "Dermatologia",
+        "Neurologia",
+        "Ortopedia"
     ]
     ```
 
-#### 2. Adicionar Horário de Atendimento
+#### 2. Listar Horários por Especialidade
+
+- **Método:** `GET`
+- **Rota:** `/agendas/{especialidade}`
+- **Descrição:** Lista todos os horários de atendimento **disponíveis** (já filtrados) para uma dada especialidade.
+- **Resposta de Sucesso (200 OK):**
+    ```json
+    {
+        "Dr. House": [
+            "2025-06-15T10:00:00",
+            "2025-06-18T10:30:00"
+        ],
+        "Dr. Strange": [
+            "2025-06-16T14:00:00"
+        ]
+    }
+    ```
+
+#### 3. Adicionar Horário de Atendimento
 
 - **Método:** `POST`
 - **Rota:** `/agendas/horarios`
 - **Descrição:** Permite que um médico adicione um novo slot de horário à sua agenda.
-- **Corpo da Requisição (JSON):**
-    ```json
-    {
-        "especialidade": "Cardiologia",
-        "id_medico": 1,
-        "data_hora": "2025-08-15T14:00:00"
-    }
-    ```
-- **Resposta de Sucesso (201 Created):**
-    ```json
-    {
-        "detail": "Horário adicionado com sucesso."
-    }
-    ```
 
-#### 3. Deletar Horário de Atendimento
+#### 4. Deletar Horário de Atendimento
 
 - **Método:** `DELETE`
 - **Rota:** `/agendas/horarios`
-- **Descrição:** Remove um horário específico da agenda de um médico (útil quando um horário é agendado ou cancelado).
-- **Corpo da Requisição (JSON):**
-    ```json
-    {
-        "especialidade": "Cardiologia",
-        "id_medico": 1,
-        "data_hora": "2025-08-15T14:00:00"
-    }
-    ```
-- **Resposta de Sucesso (200 OK):**
-    ```json
-    {
-        "detail": "Operação de deleção concluída."
-    }
-    ```
+- **Descrição:** Remove um horário específico da agenda de um médico.
 
 ## Dicas Adicionais
 
 - Para desativar o ambiente virtual em qualquer terminal, use o comando:
     ```bash
     deactivate
-    ```
+    

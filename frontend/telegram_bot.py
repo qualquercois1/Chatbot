@@ -159,8 +159,8 @@ async def handle_registration_decision(update: Update, context: ContextTypes.DEF
         await query.message.reply_text(
             "Sem problemas, vamos fazer seu cadastro agora. "
             "Por favor, me envie seus dados em uma única mensagem, como no exemplo:\n\n"
-            "Nome: João da Silva, Idade: 30, Sexo: Masculino, CPF: 12345678900, "
-            "Telefone: 61987654321, Email: joao.silva@email.com"
+            "Nome: João da Silva, \nIdade: 30, \nSexo: Masculino, \nCPF: 12345678900, "
+            "Telefone: 61987654321, \nEmail: joao.silva@email.com"
         )
         return AWAITING_DETAILS
     else: # cadastro_sim
