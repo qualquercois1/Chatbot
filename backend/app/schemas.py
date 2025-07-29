@@ -21,7 +21,8 @@ class CadastroPessoaPayload(BaseModel):
     email: str
 
 class ConsultaPayload(BaseModel):
-    cpf: str
+    cpf_paciente: str
     especialidade: str
-    medico: str
-    horario: str
+    id_medico: int
+    doutor: str
+    data_hora: str

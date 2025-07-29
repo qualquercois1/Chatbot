@@ -5,6 +5,14 @@ from app.schemas import HorarioPostPayload, HorarioDeletePayload
 
 router = APIRouter(prefix="/agendas", tags=["Gerenciamento de Agenda"])
 
+@router.get("/especialidades", response_model=list[str], summary="Lista todas as especialidades disponíveis")
+def obter_especialidades(service: AgendaService = Depends(get_agenda_service)):
+    """
+    Retorna uma lista com todas as chaves de especialidade de primeiro nível 
+    do arquivo de agendamentos.
+    """
+    return service.listar_especialidades()
+
 @router.get("/{especialidade}")
 def listar_horarios(especialidade: str, service: AgendaService = Depends(get_agenda_service)):
     horarios = service.listar_por_especialidade(especialidade)

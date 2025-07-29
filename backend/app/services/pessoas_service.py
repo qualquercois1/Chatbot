@@ -1,125 +1,112 @@
 # app/services/pessoas_service.py
 import csv
-from app.config import URL_CADASTROS, URL_CONSULTAS, CABECALHO_CADASTROS
+import os
+from app.config import URL_CONSULTAS, URL_CADASTROS, CABECALHO_CADASTROS
 from app.schemas import CadastroPessoaPayload, ConsultaPayload
-from .agenda_service import AgendaService, get_agenda_service 
-from typing import Optional
-from fastapi import Depends
 
 class PessoasService:
-    def __init__(self, agenda_service: AgendaService):
-        self.agenda_service = agenda_service
+    def __init__(self):
+        self.csv_path_cadastros = URL_CADASTROS
+        self.csv_path_consultas = URL_CONSULTAS
 
-    def _cpf_existe(self, cpf: str, url_arquivo: str) -> bool:
+    def _carregar_pessoas(self) -> list[dict]:
+        """Carrega todos os cadastros do arquivo CSV."""
         try:
-            with open(url_arquivo, mode='r', newline='', encoding='utf-8') as f:
+            # Garante que o arquivo exista com o cabeçalho correto
+            if not os.path.exists(self.csv_path_cadastros) or os.path.getsize(self.csv_path_cadastros) == 0:
+                with open(self.csv_path_cadastros, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(CABECALHO_CADASTROS)
+                return []
+
+            with open(self.csv_path_cadastros, mode='r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                for linha in reader:
-                    if linha and linha.get('cpf', '').strip() == cpf:
-                        return True
-            return False
-        except FileNotFoundError:
-            return False
+                return list(reader)
+        except Exception as e:
+            print(f"Erro ao carregar o arquivo CSV de cadastros: {e}")
+            return []
+
+    def buscar_por_cpf(self, cpf: str) -> dict | None:
+        """Busca uma pessoa pelo CPF no arquivo CSV."""
+        # Garante que o CPF a ser buscado esteja limpo (apenas números)
+        cpf_limpo = ''.join(filter(str.isdigit, cpf))
         
-    def buscar_por_cpf(self, cpf: str) -> Optional[CadastroPessoaPayload]:
-
-        try:
-            with open(URL_CADASTROS, mode='r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for linha in reader:
-                    if linha and linha.get('cpf', '').strip() == cpf:
-                        dados = {
-                            "nome": linha.get("nome", "").strip(),
-                            "idade": int(linha.get("idade", "0").strip() or 0),
-                            "sexo": linha.get("sexo", "").strip(),
-                            "cpf": linha.get("cpf", "").strip(),
-                            "telefone": linha.get("telefone", "").strip(),
-                            "email": linha.get("email", "").strip(),
-                        }
-                        return CadastroPessoaPayload(**dados)
-        except FileNotFoundError:
-            return None
+        pessoas = self._carregar_pessoas()
+        for pessoa in pessoas:
+            # Compara com o CPF limpo do arquivo
+            cpf_arquivo_limpo = ''.join(filter(str.isdigit, pessoa.get('cpf', '')))
+            if cpf_arquivo_limpo == cpf_limpo:
+                return pessoa
         return None
 
-    def cadastrar(self, payload: CadastroPessoaPayload):
-        if self._cpf_existe(payload.cpf, URL_CADASTROS):
-            return False # CPF já existe
-        
-        nova_linha = [payload.nome, payload.idade, payload.sexo, payload.cpf, payload.telefone, payload.email]
-        with open(URL_CADASTROS, mode='a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(nova_linha)
-        return True # Sucesso
-    
-    def deletar_por_cpf(self, cpf: str) -> bool:
-        linhas_para_manter = []
-        pessoa_encontrada = False
+    def cadastrar(self, payload: CadastroPessoaPayload) -> bool:
+        """Cadastra uma nova pessoa no arquivo CSV."""
+        # Verifica se o CPF já existe antes de cadastrar
+        if self.buscar_por_cpf(payload.cpf):
+            return False # CPF já cadastrado
+
         try:
-            with open(URL_CADASTROS, mode='r', newline='', encoding='utf-8') as f:
-                reader = list(csv.reader(f)) 
-                if not reader: 
-                    return False
-                
-                cabecalho = reader[0]
-                linhas_para_manter.append(cabecalho)
-
-                # Itera a partir da segunda linha (pós-cabeçalho)
-                for linha in reader[1:]:
-                    # A coluna do CPF é a 3 (índice 3)
-                    if linha and len(linha) > 3 and linha[3].strip() == cpf:
-                        pessoa_encontrada = True
-                    else:
-                        linhas_para_manter.append(linha)
-            
-            if not pessoa_encontrada:
-                return False # Se não encontrou o CPF, retorna False
-
-            # Se encontrou, reescreve o arquivo apenas com as linhas para manter
-            with open(URL_CADASTROS, mode='w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerows(linhas_para_manter)
-            
-            return True # Retorna True indicando sucesso
-            
-        except FileNotFoundError:
+            # Abre o arquivo em modo 'append' para adicionar uma nova linha
+            with open(self.csv_path_cadastros, mode='a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=CABECALHO_CADASTROS)
+                writer.writerow(payload.model_dump())
+            return True
+        except Exception as e:
+            print(f"ERRO ao salvar cadastro no CSV: {e}")
             return False
 
-    def agendar_consulta(self, payload: ConsultaPayload):
-        # 1. Responsabilidade do PessoasService: Validar CPF no seu arquivo (cadastros.csv)
-        if not self._cpf_existe(payload.cpf, URL_CADASTROS):
-            raise ValueError(f"CPF '{payload.cpf}' não encontrado.")
-        
-        # 2. Responsabilidade do PessoasService: Validar se horário já foi agendado (pessoa_horario.csv)
+    def agendar_consulta(self, payload: ConsultaPayload) -> bool:
+        """Registra uma nova consulta no arquivo CSV."""
         try:
-            with open(URL_CONSULTAS, mode='r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for consulta in reader:
-                    if consulta and consulta.get('horario', '').strip() == payload.horario:
-                        raise ValueError(f"Horário '{payload.horario}' já está ocupado.")
-        except FileNotFoundError:
-            # Se o arquivo não existe, não há consultas, então podemos continuar.
-            pass
+            header = ['cpf', 'especialidade', 'doutor', 'horario']
+            file_exists = os.path.exists(self.csv_path_consultas)
+            
+            with open(self.csv_path_consultas, mode='a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=header)
+                if not file_exists or os.path.getsize(self.csv_path_consultas) == 0:
+                    writer.writeheader()
+                
+                new_row = {
+                    'cpf': payload.cpf_paciente,
+                    'especialidade': payload.especialidade,
+                    'doutor': payload.doutor,
+                    'horario': payload.data_hora
+                }
+                writer.writerow(new_row)
+            return True
+        except Exception as e:
+            print(f"ERRO CRÍTICO ao salvar a consulta no CSV: {e}")
+            return False
 
-        # 3. Responsabilidade do PessoasService: PEDIR ao AgendaService para fazer sua parte.
-        # Ele não sabe como o AgendaService remove o horário, ele apenas confia e chama o método.
-        sucesso_remocao = self.agenda_service.remover_horario_agendado(
-            especialidade=payload.especialidade,
-            medico=payload.medico,
-            horario=payload.horario
-        )
+    def deletar_por_cpf(self, cpf: str) -> bool:
+        """Deleta uma pessoa do cadastro lendo e reescrevendo o arquivo CSV."""
+        cpf_limpo = ''.join(filter(str.isdigit, cpf))
+        pessoas = self._carregar_pessoas()
         
-        if not sucesso_remocao:
-            raise ValueError("Horário não disponível ou não encontrado na agenda para remoção.")
+        pessoa_encontrada = False
+        pessoas_mantidas = []
+        for pessoa in pessoas:
+            cpf_arquivo_limpo = ''.join(filter(str.isdigit, pessoa.get('cpf', '')))
+            if cpf_arquivo_limpo == cpf_limpo:
+                pessoa_encontrada = True
+            else:
+                pessoas_mantidas.append(pessoa)
 
-        # 4. Responsabilidade do PessoasService: Registrar a nova consulta no seu arquivo (pessoa_horario.csv)
-        nova_consulta = [payload.cpf, payload.especialidade, payload.medico, payload.horario]
-        with open(URL_CONSULTAS, mode='a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(nova_consulta)
+        if not pessoa_encontrada:
+            return False
 
-        return True
+        try:
+            # Reescreve o arquivo apenas com as pessoas que não foram deletadas
+            with open(self.csv_path_cadastros, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=CABECALHO_CADASTROS)
+                writer.writeheader()
+                writer.writerows(pessoas_mantidas)
+            return True
+        except Exception as e:
+            print(f"ERRO ao reescrever o CSV de cadastros após deleção: {e}")
+            return False
 
-# Injeção de Dependência entre serviços
-def get_pessoas_service(agenda_service: AgendaService = Depends(get_agenda_service)):
-    from .agenda_service import agenda_service_instance
-    return PessoasService(agenda_service_instance)
+# Singleton
+pessoas_service_instance = PessoasService()
+def get_pessoas_service():
+    return pessoas_service_instance

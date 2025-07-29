@@ -77,7 +77,7 @@ def cadastrar():
         nome_usuario = dados_dicionario.get("nome", "pessoa")
         prompt_final_sucesso = prompt2.format(nome_usuario=nome_usuario)
         resposta_amigavel = gerar_conteudo_gemini(prompt_final_sucesso)
-        print(f"\n🤖 Assistente: {resposta_amigavel}")
+        return resposta_amigavel
     else:
         print(f"❌ Erro {response.status_code}: {response.text}")
         #gemini informa o erro
@@ -86,7 +86,7 @@ def cadastrar():
             texto_erro=response.text
         )
         resposta_erro_amigavel = gerar_conteudo_gemini(prompt_final_erro)
-        print(f"\n🤖 Assistente: {resposta_erro_amigavel}")
+        return resposta_erro_amigavel
 
     #com base na resposta da API o gemini deve retornar uma resposta também e conduzir para o proximo passo
 
@@ -97,7 +97,8 @@ def mensagem_entrada():
         if entrada.lower() == 'sim':
             consultar_cadastro()
         elif remover_acentos(entrada).lower() == 'nao':
-            cadastrar()
+            resposta = cadastrar()
+            print(resposta)
 
 
 if __name__ == "__main__":
