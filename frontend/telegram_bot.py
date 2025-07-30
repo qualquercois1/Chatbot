@@ -1,5 +1,3 @@
-# frontend/telegram_bot.py
-
 import os
 import logging
 import json
@@ -8,7 +6,6 @@ from datetime import datetime
 from collections import defaultdict
 from dotenv import load_dotenv
 
-# Importações do Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -20,18 +17,15 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-# Importações da sua lógica de backend
 import sys
 
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend'))
 sys.path.insert(0, backend_path)
 
-# ### MUDANÇA ###: Importando o novo prompt6
 from app.prompts.prompts_cadastro import prompt1, prompt4, prompt5, prompt6
 import google.generativeai as genai
 import requests
 
-# --- CONFIGURAÇÃO INICIAL ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -52,8 +46,6 @@ genai.configure(api_key=API_KEY)
 MODEL_NAME = "gemini-1.5-flash"
 model = genai.GenerativeModel(MODEL_NAME)
 
-
-# --- FUNÇÕES DE LÓGICA DE NEGÓCIO (API E GEMINI) ---
 
 def gerar_resposta_amigavel(situacao: str, dados_adicionais: dict = None) -> str:
     if dados_adicionais is None:
@@ -143,12 +135,10 @@ def buscar_consultas_agendadas_api(cpf: str) -> list[dict] | None:
         return None
 
 
-# --- ESTADOS DA CONVERSA ---
 (ASKED_CONSULTA, ASKED_REGISTRATION, AWAITING_DETAILS, AWAITING_CPF,
  AWAITING_SPECIALTY, AWAITING_DAY_INPUT, SELECTING_TIME, AWAITING_CPF_FOR_APPOINTMENTS) = range(8)
 
 
-# --- FUNÇÕES HANDLER DO BOT ---
 
 async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"), InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas")], [InlineKeyboardButton("Sair", callback_data="cancelar_inicio")]]
@@ -343,7 +333,6 @@ async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     texto_usuario = update.message.text
     await update.message.reply_text("Entendido. Analisando a data informada...")
 
-    # 1. Usar LLM para extrair e normalizar a data
     data_atual = datetime.now().strftime("%d/%m/%Y")
     prompt = prompt6.format(texto_usuario=texto_usuario, data_atual=data_atual)
     resposta_json_str = model.generate_content(prompt).text
@@ -352,7 +341,6 @@ async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except json.JSONDecodeError:
         data_extraida_str = None
 
-    # 2. Validar a data extraída
     if not data_extraida_str:
         resposta = gerar_resposta_amigavel("formato_data_invalido")
         await update.message.reply_text(resposta)
@@ -369,7 +357,6 @@ async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("Não é possível agendar para uma data passada. Por favor, insira uma data futura.")
         return AWAITING_DAY_INPUT
 
-    # 3. Prosseguir com a data validada
     await update.message.reply_text(f"Ótimo! Verificando horários para {data_selecionada.strftime('%d/%m/%Y')}...")
     agenda_completa = context.user_data.get('agenda_completa', {})
     keyboard = []

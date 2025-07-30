@@ -1,4 +1,3 @@
-# app/routers/pessoas_router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.services.pessoas_service import PessoasService, get_pessoas_service
 from app.schemas import CadastroPessoaPayload, ConsultaPayload
@@ -15,12 +14,9 @@ def obter_pessoa_por_cpf(cpf: str, service: PessoasService = Depends(get_pessoas
         )
     return pessoa
 
-### NOVO ENDPOINT ADICIONADO AQUI ###
 @router.get("/pessoas/{cpf}/consultas_agendadas", response_model=list[ConsultaPayload])
 def obter_consultas_por_cpf(cpf: str, service: PessoasService = Depends(get_pessoas_service)):
-    """Busca e retorna todas as consultas agendadas para um CPF específico."""
     consultas = service.buscar_consultas_por_cpf(cpf)
-    # A função de serviço já retorna uma lista (vazia ou não), então podemos retorná-la diretamente.
     return consultas
 
 @router.post("/pessoas/cadastro", status_code=status.HTTP_201_CREATED)

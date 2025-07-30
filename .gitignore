@@ -1,12 +1,9 @@
-# Arquivos de Bytecode e Cache do Python
+
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Ambientes Virtuais
-# NUNCA comitar seu ambiente virtual. Ele contém centenas de arquivos
-# e é específico da sua máquina. O requirements.txt é usado para recriá-lo.
 venv/
 env/
 .venv/
@@ -14,19 +11,18 @@ ENV/
 env.bak/
 venv.bak/
 
-# Arquivos de ambiente (SECRETS!)
-# ESSENCIAL para não vazar suas chaves de API (como a do Telegram)
+
 .env
 .env.*
 *.env
 
-# IDEs e editores de texto
+
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
 
-# Artefatos de build e empacotamento do Python
+
 build/
 dist/
 *.egg-info/
@@ -35,16 +31,16 @@ sdist/
 wheelhouse/
 pip-wheel-metadata/
 
-# Logs e arquivos temporários
+
 *.log
 *.tmp
 *.swp
 
-# Arquivos de Sistema Operacional
+
 .DS_Store
 Thumbs.db
 
-# Arquivos de teste e cobertura de código
+
 .pytest_cache/
 .tox/
 htmlcov/

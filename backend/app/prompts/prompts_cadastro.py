@@ -1,5 +1,3 @@
-# app/prompts/prompts_cadastro.py
-
 prompt1 = """
 ################################################################################
 # PROMPT: DATA EXTRACTION AND STRUCTURING ENGINE V1.0
