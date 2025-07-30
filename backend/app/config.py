@@ -18,6 +18,7 @@ URL_AGENDAMENTOS = os.path.join(DATA_DIR, 'agendamentos.json')
 URL_CONSULTAS = os.path.join(DATA_DIR, 'pessoa_horario.csv')
 # ### MUDANÇA ###: Apontando para o arquivo CSV correto para os cadastros
 URL_CADASTROS = os.path.join(DATA_DIR, 'cadastros.csv')
+URL_AGENDAMENTOS_EXAMES = os.path.join(DATA_DIR, 'agendamentos_exames.json')
 
 # --- Define os cabeçalhos para os arquivos CSV ---
 CABECALHO_CONSULTAS = ['cpf', 'especialidade', 'doutor', 'horario']
