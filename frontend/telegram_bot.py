@@ -26,7 +26,8 @@ import sys
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend'))
 sys.path.insert(0, backend_path)
 
-from app.prompts.prompts_cadastro import prompt1, prompt2, prompt3
+# ### MUDANÇA ###: Importando o novo prompt6
+from app.prompts.prompts_cadastro import prompt1, prompt4, prompt5, prompt6
 import google.generativeai as genai
 import requests
 
@@ -36,14 +37,12 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Caminho correto para o .env, um nível acima da pasta 'frontend'
 load_dotenv(dotenv_path=os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env')))
 
 API_URL_BASE = "http://127.0.0.1:8000"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_KEY = os.getenv("API_KEY")
 
-# Adicionado um log para verificar se o token está sendo carregado
 if not TELEGRAM_TOKEN:
     logging.error("TELEGRAM_TOKEN não encontrado no .env! O bot não poderá iniciar.")
 if not API_KEY:
@@ -54,7 +53,16 @@ MODEL_NAME = "gemini-1.5-flash"
 model = genai.GenerativeModel(MODEL_NAME)
 
 
-# --- FUNÇÕES DE LÓGICA DE NEGÓCIO (API) ---
+# --- FUNÇÕES DE LÓGICA DE NEGÓCIO (API E GEMINI) ---
+
+def gerar_resposta_amigavel(situacao: str, dados_adicionais: dict = None) -> str:
+    if dados_adicionais is None:
+        dados_adicionais = {}
+    prompt = prompt5.format(
+        situacao=situacao,
+        dados_adicionais=json.dumps(dados_adicionais, ensure_ascii=False)
+    )
+    return model.generate_content(prompt).text
 
 def processar_cadastro(texto_usuario: str) -> dict | None:
     URL = API_URL_BASE + '/pessoas/cadastro'
@@ -74,12 +82,9 @@ def processar_cadastro(texto_usuario: str) -> dict | None:
 
 
 def buscar_pessoa_por_cpf(cpf: str) -> dict | None:
-    """Chama a API para obter os dados de uma pessoa pelo CPF."""
     URL = f"{API_URL_BASE}/pessoas/{cpf}"
-    logging.info(f"--- DEBUG: Chamando API para buscar CPF na URL: {URL}")
     try:
         response = requests.get(URL)
-        logging.info(f"--- DEBUG: Resposta da API - Status: {response.status_code}, Conteúdo: {response.text}")
         if response.status_code == 200:
             return response.json()
         return None
@@ -117,7 +122,7 @@ def agendar_consulta_api(payload: dict) -> tuple[bool, str | None]:
     try:
         response = requests.post(URL, json=payload)
         if response.status_code == 201:
-            return (True, None) # Sucesso
+            return (True, None)
         else:
             error_detail = response.json().get("detail", "Ocorreu um erro desconhecido.")
             return (False, error_detail)
@@ -128,10 +133,8 @@ def agendar_consulta_api(payload: dict) -> tuple[bool, str | None]:
 
 def buscar_consultas_agendadas_api(cpf: str) -> list[dict] | None:
     URL = f"{API_URL_BASE}/pessoas/{cpf}/consultas_agendadas"
-    logging.info(f"--- DEBUG: Chamando API para buscar consultas agendadas na URL: {URL}")
     try:
         response = requests.get(URL)
-        logging.info(f"--- DEBUG: Resposta da API - Status: {response.status_code}, Conteúdo: {response.text}")
         if response.status_code == 200:
             return response.json()
         return None
@@ -148,40 +151,15 @@ def buscar_consultas_agendadas_api(cpf: str) -> list[dict] | None:
 # --- FUNÇÕES HANDLER DO BOT ---
 
 async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Envia a mensagem do menu principal com os botões."""
-    keyboard = [
-        [
-            InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"),
-            InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas"),
-        ],
-        [
-            InlineKeyboardButton("Sair", callback_data="cancelar_inicio")
-        ]
-    ]
+    keyboard = [[InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"), InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas")], [InlineKeyboardButton("Sair", callback_data="cancelar_inicio")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
     message_sender = update.message or update.callback_query.message
-    await message_sender.reply_text(
-        "Posso te ajudar com mais alguma coisa?",
-        reply_markup=reply_markup,
-    )
+    await message_sender.reply_text("Posso te ajudar com mais alguma coisa?", reply_markup=reply_markup)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Inicia a conversa e mostra o menu principal."""
-    keyboard = [
-        [
-            InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"),
-            InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas"),
-        ],
-        [
-            InlineKeyboardButton("Sair", callback_data="cancelar_inicio")
-        ]
-    ]
+    keyboard = [[InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"), InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas")], [InlineKeyboardButton("Sair", callback_data="cancelar_inicio")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "Olá! Sou sua assistente virtual. Como posso ajudar hoje?",
-        reply_markup=reply_markup,
-    )
+    await update.message.reply_text("Olá! Sou sua assistente virtual. Como posso ajudar hoje?", reply_markup=reply_markup)
     return ASKED_CONSULTA
 
 
@@ -189,7 +167,6 @@ async def handle_main_menu_decision(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     choice = query.data
-
     selected_button_text = "Opção desconhecida"
     for row in query.message.reply_markup.inline_keyboard:
         for button in row:
@@ -198,22 +175,11 @@ async def handle_main_menu_decision(update: Update, context: ContextTypes.DEFAUL
                 break
         if selected_button_text != "Opção desconhecida":
             break
-
-    await query.edit_message_text(
-        text=f"{query.message.text}\n\nSua escolha: {selected_button_text}",
-        reply_markup=None)
-
+    await query.edit_message_text(text=f"{query.message.text}\n\nSua escolha: {selected_button_text}", reply_markup=None)
     if choice == "agendar_consulta":
-        keyboard = [
-            [
-                InlineKeyboardButton("Já tenho cadastro", callback_data="cadastro_sim"),
-                InlineKeyboardButton("Ainda não tenho cadastro", callback_data="cadastro_nao"),
-            ]
-        ]
+        keyboard = [[InlineKeyboardButton("Já tenho cadastro", callback_data="cadastro_sim"), InlineKeyboardButton("Ainda não tenho cadastro", callback_data="cadastro_nao")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text(
-            text="Ótimo! Para agendar, você já possui cadastro conosco?", reply_markup=reply_markup
-        )
+        await query.message.reply_text(text="Ótimo! Para agendar, você já possui cadastro conosco?", reply_markup=reply_markup)
         return ASKED_REGISTRATION
     elif choice == "minhas_consultas":
         if context.user_data.get('cpf'):
@@ -226,7 +192,6 @@ async def handle_main_menu_decision(update: Update, context: ContextTypes.DEFAUL
     elif choice == "cancelar_inicio":
         await query.message.reply_text("Tudo bem! Se precisar de algo, é só me chamar com /start. 😊")
         return ConversationHandler.END
-
     await query.message.reply_text("Desculpe, não entendi sua escolha. Por favor, tente novamente com /start.")
     return ConversationHandler.END
 
@@ -234,7 +199,6 @@ async def handle_main_menu_decision(update: Update, context: ContextTypes.DEFAUL
 async def handle_registration_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-
     selected_button_text = "Opção desconhecida"
     for row in query.message.reply_markup.inline_keyboard:
         for button in row:
@@ -243,9 +207,7 @@ async def handle_registration_decision(update: Update, context: ContextTypes.DEF
                 break
         if selected_button_text != "Opção desconhecida":
             break
-
-    await query.edit_message_text(text=f"{query.message.text}\n\nSua resposta: {selected_button_text}",
-                                  reply_markup=None)
+    await query.edit_message_text(text=f"{query.message.text}\n\nSua resposta: {selected_button_text}", reply_markup=None)
     if query.data == "cadastro_nao":
         await query.message.reply_text(
             "Sem problemas, vamos fazer seu cadastro agora. "
@@ -254,8 +216,7 @@ async def handle_registration_decision(update: Update, context: ContextTypes.DEF
             "Telefone: 61987654321, \nEmail: joao.silva@email.com"
         )
         return AWAITING_DETAILS
-    else:  # cadastro_sim
-        ### MUDANÇA ###: Verifica se o CPF já está salvo antes de perguntar.
+    else:
         if context.user_data.get('cpf'):
             cpf_salvo = context.user_data['cpf']
             pessoa = buscar_pessoa_por_cpf(cpf_salvo)
@@ -273,49 +234,46 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     dados_cadastrados = processar_cadastro(user_details)
     if dados_cadastrados:
         context.user_data['cpf'] = dados_cadastrados.get('cpf')
-        await update.message.reply_text("✅ Cadastro realizado com sucesso!")
+        resposta = gerar_resposta_amigavel("cadastro_sucesso")
+        await update.message.reply_text(resposta)
         return await ask_specialty(update, context)
     else:
-        await update.message.reply_text(
-            "❌ Desculpe, houve um erro no cadastro. Por favor, tente novamente ou digite /cancelar.")
+        resposta = gerar_resposta_amigavel("cadastro_falha")
+        await update.message.reply_text(resposta)
         return AWAITING_DETAILS
 
 
 async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recebe o CPF, valida via API e continua o fluxo."""
-    cpf_input = update.message.text.strip()
-    cpf_limpo = re.sub(r'\D', '', cpf_input)
-
-    if not (cpf_limpo.isdigit() and len(cpf_limpo) == 11):
-        await update.message.reply_text("CPF inválido. Por favor, digite um CPF com 11 dígitos numéricos.")
+    texto_usuario = update.message.text
+    await update.message.reply_text("Verificando seu CPF com nosso sistema de IA...")
+    prompt = prompt4.format(texto_usuario=texto_usuario)
+    resposta_json_str = model.generate_content(prompt).text
+    try:
+        cpf_extraido = json.loads(resposta_json_str).get("cpf")
+    except json.JSONDecodeError:
+        cpf_extraido = None
+    if not cpf_extraido:
+        resposta = gerar_resposta_amigavel("cpf_invalido")
+        await update.message.reply_text(resposta)
         return AWAITING_CPF
-
-    await update.message.reply_text(f"Verificando CPF: {cpf_limpo}...")
-
-    pessoa_encontrada = buscar_pessoa_por_cpf(cpf_limpo)
-
+    pessoa_encontrada = buscar_pessoa_por_cpf(cpf_extraido)
     if pessoa_encontrada:
         context.user_data['cpf'] = pessoa_encontrada.get('cpf')
-        nome_pessoa = pessoa_encontrada.get('nome', 'Cliente')
-        await update.message.reply_text(f"✅ Cadastro localizado, {nome_pessoa}!")
+        dados = {"nome_paciente": pessoa_encontrada.get('nome', 'Cliente')}
+        resposta = gerar_resposta_amigavel("cpf_encontrado", dados)
+        await update.message.reply_text(resposta)
         return await ask_specialty(update, context)
     else:
-        await update.message.reply_text(
-            "❌ CPF não encontrado em nosso sistema. "
-            "Por favor, verifique e tente novamente ou inicie um novo cadastro com /start."
-        )
+        resposta = gerar_resposta_amigavel("cpf_nao_encontrado")
+        await update.message.reply_text(resposta)
         return ConversationHandler.END
 
 
 async def _show_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE, cpf: str) -> int:
-    """Busca e exibe as consultas para um determinado CPF."""
     message_sender = update.message or update.callback_query.message
-    
     pessoa_encontrada = buscar_pessoa_por_cpf(cpf)
     nome_paciente = pessoa_encontrada.get('nome', 'Cliente') if pessoa_encontrada else 'Cliente'
-
     consultas = buscar_consultas_agendadas_api(cpf)
-
     if consultas is not None:
         if consultas:
             message = f"Suas consultas agendadas, {nome_paciente}:\n\n"
@@ -332,38 +290,28 @@ async def _show_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE,
         else:
             await message_sender.reply_text(f"ℹ️ Nenhuma consulta agendada encontrada para o CPF {cpf}.")
     else:
-        await message_sender.reply_text(
-            "❌ Desculpe, houve um erro ao buscar suas consultas. Por favor, tente novamente mais tarde.")
-
+        await message_sender.reply_text("❌ Desculpe, houve um erro ao buscar suas consultas. Por favor, tente novamente mais tarde.")
     await _send_main_menu(update, context)
     return ASKED_CONSULTA
 
 async def handle_cpf_for_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recebe o CPF do usuário, salva na sessão e chama a função para mostrar as consultas."""
     cpf_input = update.message.text.strip()
     cpf_limpo = re.sub(r'\D', '', cpf_input)
-
     if not (cpf_limpo.isdigit() and len(cpf_limpo) == 11):
-        await update.message.reply_text(
-            "CPF inválido. Por favor, digite um CPF com 11 dígitos numéricos para consultar agendamentos.")
+        await update.message.reply_text("CPF inválido. Por favor, digite um CPF com 11 dígitos numéricos para consultar agendamentos.")
         return AWAITING_CPF_FOR_APPOINTMENTS
-
     await update.message.reply_text(f"Buscando consultas para o CPF: {cpf_limpo}...")
-    
     context.user_data['cpf'] = cpf_limpo
-    
     return await _show_appointments(update, context, cpf_limpo)
 
 
 async def ask_specialty(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None) -> int:
-    message_text = "Perfeito! Para qual especialidade você gostaria de agendar?"
+    message_text = "Para qual especialidade você gostaria de agendar?"
     especialidades = listar_especialidades_api()
     if not especialidades:
-        error_message = "Desculpe, não consegui carregar as especialidades no momento. Tente novamente mais tarde."
-        if query:
-            await query.message.reply_text(error_message)
-        else:
-            await update.message.reply_text(error_message)
+        resposta = gerar_resposta_amigavel("erro_listar_especialidades")
+        if query: await query.message.reply_text(resposta)
+        else: await update.message.reply_text(resposta)
         return ConversationHandler.END
     keyboard = [[InlineKeyboardButton(esp, callback_data=esp)] for esp in especialidades]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -379,40 +327,53 @@ async def handle_specialty_selection(update: Update, context: ContextTypes.DEFAU
     await query.answer()
     especialidade = query.data
     context.user_data['especialidade'] = especialidade
-    await query.edit_message_text(
-        text=f"{query.message.text}\n\nEspecialidade escolhida: {especialidade}",
-        reply_markup=None
-    )
+    await query.edit_message_text(text=f"{query.message.text}\n\nEspecialidade: {especialidade}", reply_markup=None)
     await query.message.reply_text(f"Buscando horários para {especialidade}...")
     horarios_por_medico = listar_horarios_disponiveis(especialidade)
     if not horarios_por_medico:
-        await query.message.reply_text(
-            f"Desculpe, não encontrei horários disponíveis para {especialidade} no momento. Tente novamente com /start.")
+        resposta = gerar_resposta_amigavel("sem_horarios_disponiveis", {"especialidade": especialidade})
+        await query.message.reply_text(resposta)
         return ConversationHandler.END
     context.user_data['agenda_completa'] = horarios_por_medico
-    await query.message.reply_text(
-        "Perfeito. Para qual dia você gostaria de agendar a consulta? (use o formato DD/MM/AAAA)")
+    await query.message.reply_text("Para qual dia você gostaria de agendar? (ex: amanhã, 30/07/2025, próxima sexta)")
     return AWAITING_DAY_INPUT
 
 
 async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_input_date = update.message.text.strip()
+    texto_usuario = update.message.text
+    await update.message.reply_text("Entendido. Analisando a data informada...")
+
+    # 1. Usar LLM para extrair e normalizar a data
+    data_atual = datetime.now().strftime("%d/%m/%Y")
+    prompt = prompt6.format(texto_usuario=texto_usuario, data_atual=data_atual)
+    resposta_json_str = model.generate_content(prompt).text
     try:
-        data_selecionada = datetime.strptime(user_input_date, "%d/%m/%Y").date()
+        data_extraida_str = json.loads(resposta_json_str).get("data")
+    except json.JSONDecodeError:
+        data_extraida_str = None
+
+    # 2. Validar a data extraída
+    if not data_extraida_str:
+        resposta = gerar_resposta_amigavel("formato_data_invalido")
+        await update.message.reply_text(resposta)
+        return AWAITING_DAY_INPUT
+
+    try:
+        data_selecionada = datetime.strptime(data_extraida_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("Formato de data inválido. Por favor, use DD/MM/AAAA (ex: 30/07/2025).")
+        resposta = gerar_resposta_amigavel("formato_data_invalido")
+        await update.message.reply_text(resposta)
         return AWAITING_DAY_INPUT
 
     if data_selecionada < datetime.now().date():
-        await update.message.reply_text(
-            "Não é possível agendar para uma data passada. Por favor, insira uma data futura.")
+        await update.message.reply_text("Não é possível agendar para uma data passada. Por favor, insira uma data futura.")
         return AWAITING_DAY_INPUT
 
+    # 3. Prosseguir com a data validada
     await update.message.reply_text(f"Ótimo! Verificando horários para {data_selecionada.strftime('%d/%m/%Y')}...")
     agenda_completa = context.user_data.get('agenda_completa', {})
     keyboard = []
     medico_id_map = defaultdict(lambda: len(medico_id_map) + 1)
-
     for medico_nome, horarios_lista in agenda_completa.items():
         id_medico = medico_id_map[medico_nome]
         for horario_str in horarios_lista:
@@ -423,78 +384,54 @@ async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     if 'callback_map' not in context.user_data:
                         context.user_data['callback_map'] = {}
                     unique_id = f"{id_medico}-{horario_str.replace(':', '').replace('-', '').replace('T', '')}"
-                    context.user_data['callback_map'][unique_id] = {
-                        'id_medico': id_medico,
-                        'medico_nome': medico_nome,
-                        'data_hora': horario_str
-                    }
+                    context.user_data['callback_map'][unique_id] = {'id_medico': id_medico, 'medico_nome': medico_nome, 'data_hora': horario_str}
                     texto_botao = f"{hora.strftime('%H:%M')} - {medico_nome}"
                     keyboard.append([InlineKeyboardButton(texto_botao, callback_data=f"select_time_{unique_id}")])
             except (ValueError, TypeError):
                 continue
-
     if not keyboard:
-        await update.message.reply_text(
-            f"Desculpe, não há horários disponíveis para o dia {data_selecionada.strftime('%d/%m/%Y')} ou todos já passaram. Por favor, escolha outro dia ou digite /cancelar.")
+        resposta = gerar_resposta_amigavel("sem_horarios_no_dia", {"data": data_selecionada.strftime('%d/%m/%Y')})
+        await update.message.reply_text(resposta)
         return AWAITING_DAY_INPUT
-
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Perfeito. Agora escolha um dos horários livres:", reply_markup=reply_markup)
+    await update.message.reply_text("Agora escolha um dos horários livres:", reply_markup=reply_markup)
     return SELECTING_TIME
 
 
 async def select_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-
     unique_id = query.data.replace("select_time_", "")
     horario_data = context.user_data.get('callback_map', {}).get(unique_id)
-
     if not horario_data:
-        await query.message.reply_text(
-            "❌ Ops! O horário selecionado não foi encontrado. Por favor, tente novamente com /start.")
+        await query.message.reply_text("❌ Ops! O horário selecionado não foi encontrado. Por favor, tente novamente com /start.")
         return ConversationHandler.END
-
     id_medico = horario_data['id_medico']
     medico_nome = horario_data['medico_nome']
     data_hora = horario_data['data_hora']
-
     hora_formatada = datetime.fromisoformat(data_hora).strftime('%d/%m/%Y às %H:%M')
-
-    await query.edit_message_text(
-        text=f"{query.message.text}\n\nHorário escolhido: {hora_formatada.split(' às ')[1]} com {medico_nome}",
-        reply_markup=None
-    )
-
-    await query.message.reply_text("Confirmando seu agendamento, um momento...")
-
-    payload = {
-        "cpf_paciente": context.user_data['cpf'],
-        "especialidade": context.user_data['especialidade'],
-        "id_medico": id_medico,
-        "doutor": medico_nome,
-        "data_hora": data_hora
-    }
-
+    await query.edit_message_text(text=f"{query.message.text}\n\nHorário: {hora_formatada.split(' às ')[1]} com {medico_nome}", reply_markup=None)
+    await query.message.reply_text("Confirmando seu agendamento...")
+    payload = {"cpf_paciente": context.user_data['cpf'], "especialidade": context.user_data['especialidade'], "id_medico": int(id_medico), "doutor": medico_nome, "data_hora": data_hora}
+    
     sucesso, mensagem_erro = agendar_consulta_api(payload)
-
+    
     if sucesso:
-        await query.message.reply_text(f"✅ Consulta agendada com sucesso para {hora_formatada} com {medico_nome}!")
+        dados = {"data_hora": hora_formatada, "doutor": medico_nome}
+        resposta = gerar_resposta_amigavel("agendamento_sucesso", dados)
     else:
-        await query.message.reply_text(f"❌ {mensagem_erro} Tente novamente com /start.")
-
+        dados = {"mensagem_erro": mensagem_erro}
+        resposta = gerar_resposta_amigavel("agendamento_falha", dados)
+        
+    await query.message.reply_text(resposta)
     await _send_main_menu(update, context)
     return ASKED_CONSULTA
 
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancela e encerra a conversa."""
     await update.message.reply_text("Tudo bem, processo cancelado. Se precisar de algo, é só chamar com /start.")
     return ConversationHandler.END
 
-
 def main() -> None:
-    """Inicia o bot."""
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
@@ -512,7 +449,6 @@ def main() -> None:
     )
     application.add_handler(conv_handler)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
