@@ -112,17 +112,20 @@ def listar_horarios_disponiveis(especialidade: str) -> dict | None:
         return None
 
 
-def agendar_consulta_api(payload: dict) -> bool:
+def agendar_consulta_api(payload: dict) -> tuple[bool, str | None]:
     URL = f"{API_URL_BASE}/consultas"
     try:
         response = requests.post(URL, json=payload)
-        return response.status_code == 201
+        if response.status_code == 201:
+            return (True, None) # Sucesso
+        else:
+            error_detail = response.json().get("detail", "Ocorreu um erro desconhecido.")
+            return (False, error_detail)
     except requests.exceptions.RequestException as e:
         logging.error(f"Erro ao chamar API de agendamento: {e}")
-        return False
+        return (False, "Não foi possível conectar ao servidor de agendamento.")
 
 
-# NOVO: Função para buscar consultas agendadas pela API
 def buscar_consultas_agendadas_api(cpf: str) -> list[dict] | None:
     URL = f"{API_URL_BASE}/pessoas/{cpf}/consultas_agendadas"
     logging.info(f"--- DEBUG: Chamando API para buscar consultas agendadas na URL: {URL}")
@@ -144,14 +147,34 @@ def buscar_consultas_agendadas_api(cpf: str) -> list[dict] | None:
 
 # --- FUNÇÕES HANDLER DO BOT ---
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def _send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Envia a mensagem do menu principal com os botões."""
     keyboard = [
         [
             InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"),
             InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas"),
         ],
         [
-            InlineKeyboardButton("Cancelar", callback_data="cancelar_inicio")
+            InlineKeyboardButton("Sair", callback_data="cancelar_inicio")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message_sender = update.message or update.callback_query.message
+    await message_sender.reply_text(
+        "Posso te ajudar com mais alguma coisa?",
+        reply_markup=reply_markup,
+    )
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Inicia a conversa e mostra o menu principal."""
+    keyboard = [
+        [
+            InlineKeyboardButton("Agendar Consulta", callback_data="agendar_consulta"),
+            InlineKeyboardButton("Minhas Consultas", callback_data="minhas_consultas"),
+        ],
+        [
+            InlineKeyboardButton("Sair", callback_data="cancelar_inicio")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -193,8 +216,13 @@ async def handle_main_menu_decision(update: Update, context: ContextTypes.DEFAUL
         )
         return ASKED_REGISTRATION
     elif choice == "minhas_consultas":
-        await query.message.reply_text("Certo. Para ver suas consultas agendadas, por favor, me informe seu CPF.")
-        return AWAITING_CPF_FOR_APPOINTMENTS
+        if context.user_data.get('cpf'):
+            cpf_salvo = context.user_data['cpf']
+            await query.message.reply_text(f"Verificando consultas para o CPF salvo: {cpf_salvo}...")
+            return await _show_appointments(update, context, cpf_salvo)
+        else:
+            await query.message.reply_text("Certo. Para ver suas consultas agendadas, por favor, me informe seu CPF.")
+            return AWAITING_CPF_FOR_APPOINTMENTS
     elif choice == "cancelar_inicio":
         await query.message.reply_text("Tudo bem! Se precisar de algo, é só me chamar com /start. 😊")
         return ConversationHandler.END
@@ -227,8 +255,16 @@ async def handle_registration_decision(update: Update, context: ContextTypes.DEF
         )
         return AWAITING_DETAILS
     else:  # cadastro_sim
-        await query.message.reply_text("Ok! Por favor, me informe seu CPF para eu localizar seu cadastro.")
-        return AWAITING_CPF
+        ### MUDANÇA ###: Verifica se o CPF já está salvo antes de perguntar.
+        if context.user_data.get('cpf'):
+            cpf_salvo = context.user_data['cpf']
+            pessoa = buscar_pessoa_por_cpf(cpf_salvo)
+            nome_pessoa = pessoa.get('nome', 'Cliente') if pessoa else 'Cliente'
+            await query.message.reply_text(f"Já identifiquei seu cadastro em nome de {nome_pessoa}. Vamos prosseguir.")
+            return await ask_specialty(update, context, query)
+        else:
+            await query.message.reply_text("Ok! Por favor, me informe seu CPF para eu localizar seu cadastro.")
+            return AWAITING_CPF
 
 
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -271,46 +307,52 @@ async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
 
 
-# NOVO: Handler para receber o CPF e listar consultas
+async def _show_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE, cpf: str) -> int:
+    """Busca e exibe as consultas para um determinado CPF."""
+    message_sender = update.message or update.callback_query.message
+    
+    pessoa_encontrada = buscar_pessoa_por_cpf(cpf)
+    nome_paciente = pessoa_encontrada.get('nome', 'Cliente') if pessoa_encontrada else 'Cliente'
+
+    consultas = buscar_consultas_agendadas_api(cpf)
+
+    if consultas is not None:
+        if consultas:
+            message = f"Suas consultas agendadas, {nome_paciente}:\n\n"
+            for i, consulta in enumerate(consultas):
+                message += f"**Consulta {i + 1}:**\n"
+                message += f"  - Especialidade: {consulta.get('especialidade', 'N/A')}\n"
+                message += f"  - Doutor: {consulta.get('doutor', 'N/A')}\n"
+                try:
+                    dt_obj = datetime.fromisoformat(consulta.get('data_hora'))
+                    message += f"  - Horário: {dt_obj.strftime('%d/%m/%Y às %H:%M')}\n\n"
+                except (ValueError, TypeError):
+                    message += f"  - Horário: {consulta.get('data_hora', 'N/A')}\n\n"
+            await message_sender.reply_text(message, parse_mode='Markdown')
+        else:
+            await message_sender.reply_text(f"ℹ️ Nenhuma consulta agendada encontrada para o CPF {cpf}.")
+    else:
+        await message_sender.reply_text(
+            "❌ Desculpe, houve um erro ao buscar suas consultas. Por favor, tente novamente mais tarde.")
+
+    await _send_main_menu(update, context)
+    return ASKED_CONSULTA
+
 async def handle_cpf_for_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recebe o CPF do usuário, salva na sessão e chama a função para mostrar as consultas."""
     cpf_input = update.message.text.strip()
     cpf_limpo = re.sub(r'\D', '', cpf_input)
 
     if not (cpf_limpo.isdigit() and len(cpf_limpo) == 11):
         await update.message.reply_text(
             "CPF inválido. Por favor, digite um CPF com 11 dígitos numéricos para consultar agendamentos.")
-        return AWAITING_CPF_FOR_APPOINTMENTS  # Permanece no estado para nova tentativa
+        return AWAITING_CPF_FOR_APPOINTMENTS
 
     await update.message.reply_text(f"Buscando consultas para o CPF: {cpf_limpo}...")
-
-    # Buscar os dados da pessoa para obter o nome
-    pessoa_encontrada = buscar_pessoa_por_cpf(cpf_limpo)
-    nome_paciente = pessoa_encontrada.get('nome', 'Cliente') if pessoa_encontrada else 'Cliente'
-
-    consultas = buscar_consultas_agendadas_api(cpf_limpo)
-
-    if consultas is not None:
-        if consultas:
-            # Modificado para mostrar o nome do paciente
-            message = f"Suas consultas agendadas, {nome_paciente}:\n\n"
-            for i, consulta in enumerate(consultas):
-                message += f"**Consulta {i + 1}:**\n"
-                message += f"  - Especialidade: {consulta.get('especialidade', 'N/A')}\n"
-                message += f"  - Doutor: {consulta.get('doutor', 'N/A')}\n"
-                # Formata a data/hora para exibição
-                try:
-                    dt_obj = datetime.fromisoformat(consulta.get('data_hora'))
-                    message += f"  - Horário: {dt_obj.strftime('%d/%m/%Y às %H:%M')}\n\n"
-                except (ValueError, TypeError):
-                    message += f"  - Horário: {consulta.get('data_hora', 'N/A')}\n\n"
-            await update.message.reply_text(message, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(f"ℹ️ Nenhuma consulta agendada encontrada para o CPF {cpf_limpo}.")
-    else:
-        await update.message.reply_text(
-            "❌ Desculpe, houve um erro ao buscar suas consultas. Por favor, tente novamente mais tarde.")
-
-    return ConversationHandler.END
+    
+    context.user_data['cpf'] = cpf_limpo
+    
+    return await _show_appointments(update, context, cpf_limpo)
 
 
 async def ask_specialty(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None) -> int:
@@ -325,9 +367,9 @@ async def ask_specialty(update: Update, context: ContextTypes.DEFAULT_TYPE, quer
         return ConversationHandler.END
     keyboard = [[InlineKeyboardButton(esp, callback_data=esp)] for esp in especialidades]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    if query:  # Se veio de um callback query
+    if query:
         await query.message.reply_text(text=message_text, reply_markup=reply_markup)
-    else:  # Se veio de uma mensagem normal (ex: após cadastro)
+    else:
         await update.message.reply_text(text=message_text, reply_markup=reply_markup)
     return AWAITING_SPECIALTY
 
@@ -361,7 +403,6 @@ async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("Formato de data inválido. Por favor, use DD/MM/AAAA (ex: 30/07/2025).")
         return AWAITING_DAY_INPUT
 
-    # Valida se a data é futura
     if data_selecionada < datetime.now().date():
         await update.message.reply_text(
             "Não é possível agendar para uma data passada. Por favor, insira uma data futura.")
@@ -370,37 +411,25 @@ async def handle_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(f"Ótimo! Verificando horários para {data_selecionada.strftime('%d/%m/%Y')}...")
     agenda_completa = context.user_data.get('agenda_completa', {})
     keyboard = []
-    medico_id_map = defaultdict(lambda: len(medico_id_map) + 1)  # Gera IDs sequenciais para médicos
+    medico_id_map = defaultdict(lambda: len(medico_id_map) + 1)
 
     for medico_nome, horarios_lista in agenda_completa.items():
-        id_medico = medico_id_map[medico_nome]  # Obtém ou cria ID para o médico
+        id_medico = medico_id_map[medico_nome]
         for horario_str in horarios_lista:
             try:
-                # Converte o horário para objeto datetime
                 horario_dt_obj = datetime.fromisoformat(horario_str)
-                # Verifica se o horário é para a data selecionada E se ainda não passou
                 if horario_dt_obj.date() == data_selecionada and horario_dt_obj > datetime.now():
                     hora = horario_dt_obj.time()
-                    # A callback_data deve ser compacta para evitar o limite de 64 bytes
-                    # Vamos mapear o horário_str para um índice ou hash para o callback
-                    # E guardar os dados completos em context.user_data
-
-                    # Armazena o mapeamento completo para recuperação posterior
                     if 'callback_map' not in context.user_data:
                         context.user_data['callback_map'] = {}
-
-                    # Cria um hash simples ou um ID sequencial para o callback_data
                     unique_id = f"{id_medico}-{horario_str.replace(':', '').replace('-', '').replace('T', '')}"
-
                     context.user_data['callback_map'][unique_id] = {
                         'id_medico': id_medico,
                         'medico_nome': medico_nome,
                         'data_hora': horario_str
                     }
-
                     texto_botao = f"{hora.strftime('%H:%M')} - {medico_nome}"
                     keyboard.append([InlineKeyboardButton(texto_botao, callback_data=f"select_time_{unique_id}")])
-
             except (ValueError, TypeError):
                 continue
 
@@ -418,10 +447,7 @@ async def select_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
 
-    # Extrai o unique_id do callback_data
     unique_id = query.data.replace("select_time_", "")
-
-    # Recupera os dados completos do horário usando o unique_id
     horario_data = context.user_data.get('callback_map', {}).get(unique_id)
 
     if not horario_data:
@@ -445,20 +471,20 @@ async def select_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     payload = {
         "cpf_paciente": context.user_data['cpf'],
         "especialidade": context.user_data['especialidade'],
-        "id_medico": id_medico,  # Já é um int
+        "id_medico": id_medico,
         "doutor": medico_nome,
         "data_hora": data_hora
     }
 
-    sucesso = agendar_consulta_api(payload)
+    sucesso, mensagem_erro = agendar_consulta_api(payload)
 
     if sucesso:
         await query.message.reply_text(f"✅ Consulta agendada com sucesso para {hora_formatada} com {medico_nome}!")
     else:
-        await query.message.reply_text(
-            "❌ Desculpe, não foi possível agendar neste horário. Ele pode ter sido ocupado ou houve um problema na API. Tente novamente com /start.")
+        await query.message.reply_text(f"❌ {mensagem_erro} Tente novamente com /start.")
 
-    return ConversationHandler.END
+    await _send_main_menu(update, context)
+    return ASKED_CONSULTA
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -477,7 +503,7 @@ def main() -> None:
             ASKED_REGISTRATION: [CallbackQueryHandler(handle_registration_decision)],
             AWAITING_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_details)],
             AWAITING_CPF: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cpf)],
-            AWAITING_CPF_FOR_APPOINTMENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cpf_for_appointments)], # NOVO: Adicionado estado para buscar consultas
+            AWAITING_CPF_FOR_APPOINTMENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cpf_for_appointments)],
             AWAITING_SPECIALTY: [CallbackQueryHandler(handle_specialty_selection)],
             AWAITING_DAY_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_day_input)],
             SELECTING_TIME: [CallbackQueryHandler(select_time)],
