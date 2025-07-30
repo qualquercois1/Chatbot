@@ -18,6 +18,14 @@ def obter_pessoa_por_cpf(
         )
     return pessoa
 
+@router.get("/pessoas/{cpf}/consultas_agendadas", response_model=list[ConsultaPayload], summary="Lista consultas agendadas para um CPF") # Tipo de retorno ajustado para ConsultaPayload
+def obter_consultas_agendadas_por_cpf(
+    cpf: str,
+    service: PessoasService = Depends(get_pessoas_service)
+):
+    consultas = service.buscar_consultas_por_cpf(cpf)
+    return consultas
+
 @router.post("/pessoas/cadastro", status_code=status.HTTP_201_CREATED)
 def cadastrar_pessoa(payload: CadastroPessoaPayload, service: PessoasService = Depends(get_pessoas_service)):
     sucesso = service.cadastrar(payload)
@@ -28,13 +36,13 @@ def cadastrar_pessoa(payload: CadastroPessoaPayload, service: PessoasService = D
 @router.delete("/{cpf}")
 def deletar_pessoa(cpf: str, service: PessoasService = Depends(get_pessoas_service)):
     sucesso = service.deletar_por_cpf(cpf)
-    
+
     if not sucesso:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pessoa com CPF '{cpf}' não encontrada."
         )
-    
+
     return {"detail": f"Pessoa com CPF '{cpf}' deletada com sucesso."}
 
 @router.post("/consultas", status_code=status.HTTP_201_CREATED)
@@ -44,5 +52,3 @@ def agendar_consulta(payload: ConsultaPayload, service: PessoasService = Depends
         return {"detail": "Consulta agendada com sucesso."}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    
-

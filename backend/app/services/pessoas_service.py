@@ -1,8 +1,8 @@
 # app/services/pessoas_service.py
 import csv
 import os
-from app.config import URL_CONSULTAS, URL_CADASTROS, CABECALHO_CADASTROS
-from app.schemas import CadastroPessoaPayload, ConsultaPayload
+from app.config import URL_CONSULTAS, URL_CADASTROS, CABECALHO_CADASTROS, CABECALHO_CONSULTAS
+from app.schemas import CadastroPessoaPayload, ConsultaPayload # Removido ConsultaAgendada
 
 class PessoasService:
     def __init__(self):
@@ -26,27 +26,57 @@ class PessoasService:
             print(f"Erro ao carregar o arquivo CSV de cadastros: {e}")
             return []
 
+    def _carregar_consultas(self) -> list[dict]:
+        """Carrega todas as consultas do arquivo CSV."""
+        try:
+            if not os.path.exists(self.csv_path_consultas) or os.path.getsize(self.csv_path_consultas) == 0:
+                with open(self.csv_path_consultas, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(CABECALHO_CONSULTAS) # Garante que o cabeçalho seja escrito
+                return []
+            with open(self.csv_path_consultas, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                return list(reader)
+        except Exception as e:
+            print(f"Erro ao carregar o arquivo CSV de consultas: {e}")
+            return []
+
     def buscar_por_cpf(self, cpf: str) -> dict | None:
         """Busca uma pessoa pelo CPF no arquivo CSV."""
-        # Garante que o CPF a ser buscado esteja limpo (apenas números)
         cpf_limpo = ''.join(filter(str.isdigit, cpf))
-        
         pessoas = self._carregar_pessoas()
         for pessoa in pessoas:
-            # Compara com o CPF limpo do arquivo
             cpf_arquivo_limpo = ''.join(filter(str.isdigit, pessoa.get('cpf', '')))
             if cpf_arquivo_limpo == cpf_limpo:
                 return pessoa
         return None
 
+    def buscar_consultas_por_cpf(self, cpf: str) -> list[ConsultaPayload]: # Tipo de retorno ajustado
+        """Busca todas as consultas agendadas para um CPF específico."""
+        cpf_limpo = ''.join(filter(str.isdigit, cpf))
+        consultas_agendadas = self._carregar_consultas()
+
+        consultas_do_paciente = []
+        for consulta in consultas_agendadas:
+            cpf_consulta_limpo = ''.join(filter(str.isdigit, consulta.get('cpf', '')))
+            if cpf_consulta_limpo == cpf_limpo:
+                # Mapeia os campos do CSV para o schema ConsultaPayload
+                compat_consulta = {
+                    "cpf_paciente": consulta.get('cpf'),
+                    "especialidade": consulta.get('especialidade'),
+                    "doutor": consulta.get('doutor'),
+                    "data_hora": consulta.get('horario'),
+                    "id_medico": 0 # id_medico não está no CSV, então um valor padrão é fornecido
+                }
+                consultas_do_paciente.append(ConsultaPayload(**compat_consulta))
+
+        return consultas_do_paciente
+
     def cadastrar(self, payload: CadastroPessoaPayload) -> bool:
         """Cadastra uma nova pessoa no arquivo CSV."""
-        # Verifica se o CPF já existe antes de cadastrar
         if self.buscar_por_cpf(payload.cpf):
-            return False # CPF já cadastrado
-
+            return False
         try:
-            # Abre o arquivo em modo 'append' para adicionar uma nova linha
             with open(self.csv_path_cadastros, mode='a', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=CABECALHO_CADASTROS)
                 writer.writerow(payload.model_dump())
@@ -58,14 +88,13 @@ class PessoasService:
     def agendar_consulta(self, payload: ConsultaPayload) -> bool:
         """Registra uma nova consulta no arquivo CSV."""
         try:
-            header = ['cpf', 'especialidade', 'doutor', 'horario']
             file_exists = os.path.exists(self.csv_path_consultas)
-            
+
             with open(self.csv_path_consultas, mode='a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=header)
+                writer = csv.DictWriter(f, fieldnames=CABECALHO_CONSULTAS)
                 if not file_exists or os.path.getsize(self.csv_path_consultas) == 0:
                     writer.writeheader()
-                
+
                 new_row = {
                     'cpf': payload.cpf_paciente,
                     'especialidade': payload.especialidade,
@@ -82,7 +111,7 @@ class PessoasService:
         """Deleta uma pessoa do cadastro lendo e reescrevendo o arquivo CSV."""
         cpf_limpo = ''.join(filter(str.isdigit, cpf))
         pessoas = self._carregar_pessoas()
-        
+
         pessoa_encontrada = False
         pessoas_mantidas = []
         for pessoa in pessoas:
@@ -96,7 +125,6 @@ class PessoasService:
             return False
 
         try:
-            # Reescreve o arquivo apenas com as pessoas que não foram deletadas
             with open(self.csv_path_cadastros, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=CABECALHO_CADASTROS)
                 writer.writeheader()
@@ -106,7 +134,6 @@ class PessoasService:
             print(f"ERRO ao reescrever o CSV de cadastros após deleção: {e}")
             return False
 
-# Singleton
 pessoas_service_instance = PessoasService()
 def get_pessoas_service():
     return pessoas_service_instance
