@@ -1,6 +1,8 @@
+
 # app/schemas.py
 
 from datetime import datetime as DatetimeClass, datetime  # MUDAR PARA ESTA LINHA
+
 
 from pydantic import BaseModel
 from typing import Optional
@@ -30,6 +32,7 @@ class ConsultaPayload(BaseModel):
     doutor: str
     data_hora: str
 
+
 class AgendarConsultaPayload(BaseModel):
     cpf_paciente: str
     especialidade: str
@@ -42,3 +45,4 @@ class AgendarExamePayload(BaseModel):
     tipo_exame: str
     local_exame: str
     data_hora: DatetimeClass
+

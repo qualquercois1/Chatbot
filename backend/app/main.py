@@ -1,4 +1,3 @@
-# app/main.py
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import os
@@ -6,9 +5,9 @@ import json
 import csv
 
 # Importa as variáveis de configuração e os routers
-# ATUALIZADO: Importando URL_AGENDAMENTOS_EXAMES e exames_router
-from .config import (URL_CADASTROS, URL_CONSULTAS, URL_AGENDAMENTOS, CABECALHO_CONSULTAS, URL_AGENDAMENTOS_EXAMES)
-from .routers import agenda_router, pessoas_router, exames_router  # Importar exames_router
+# ATUALIZADO: Importando todas as URLs e routers necessários
+from .config import (URL_CADASTROS, URL_CONSULTAS, URL_AGENDAMENTOS, CABECALHO_CONSULTAS, URL_AGENDAMENTOS_EXAMES, URL_EXAMES_AGENDADOS)
+from .routers import agenda_router, pessoas_router, exames_router
 
 
 def inicializar_arquivos():
@@ -42,6 +41,12 @@ def inicializar_arquivos():
             json.dump({}, f)  # Cria um JSON vazio
         print(f"Arquivo '{URL_AGENDAMENTOS_EXAMES}' criado.")
 
+    # NOVO: Inicializa o arquivo de exames agendados
+    if not os.path.exists(URL_EXAMES_AGENDADOS):
+        with open(URL_EXAMES_AGENDADOS, 'w', encoding='utf-8') as f:
+            json.dump([], f) # Exames agendados serão uma lista
+        print(f"Arquivo '{URL_EXAMES_AGENDADOS}' criado.")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,7 +62,7 @@ app = FastAPI(lifespan=lifespan)
 # Inclui os routers na aplicação
 app.include_router(agenda_router.router)
 app.include_router(pessoas_router.router)
-app.include_router(exames_router.router)  # NOVO: Incluir router de exames
+app.include_router(exames_router.router) # NOVO: Incluir router de exames
 
 
 @app.get("/")
