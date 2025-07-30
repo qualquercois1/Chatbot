@@ -200,3 +200,4 @@ Use o seguinte mapa de interpretação como guia principal para seu diagnóstico
 - Mantenha um tom calmo e tranquilizador. A culpa não é do usuário.
 - Seja sempre construtivo, focando na solução.
 """
+
