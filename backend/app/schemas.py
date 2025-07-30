@@ -1,8 +1,7 @@
 
 # app/schemas.py
 
-from datetime import datetime as DatetimeClass, datetime  # MUDAR PARA ESTA LINHA
-
+from datetime import datetime as DatetimeClass, datetime 
 
 from pydantic import BaseModel
 from typing import Optional
@@ -44,5 +43,7 @@ class AgendarExamePayload(BaseModel):
     cpf_paciente: str
     tipo_exame: str
     local_exame: str
-    data_hora: DatetimeClass
+    data_hora:  datetime
+
+    
 

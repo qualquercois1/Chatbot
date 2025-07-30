@@ -10,5 +10,11 @@
     "tipo_exame": "Exames Cardíacos",
     "local_exame": "CardioDiagnóstico Central",
     "data_hora": "2025-08-01T10:00:00"
+  },
+  {
+    "cpf_paciente": "08845128199",
+    "tipo_exame": "Exames Ortopédicos",
+    "local_exame": "Centro de Radiologia e Imagem Óssea - Principal",
+    "data_hora": "2025-08-01T10:00:00"
   }
 ]
